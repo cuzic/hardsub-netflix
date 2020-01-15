@@ -3,6 +3,7 @@ require 'zip'
 require 'fileutils'
 require 'securerandom'
 require 'zip'
+require 'pry'
 
 # $subtitleedit = "C:\\Program Files\\Subtitle Edit\\SubtitleEdit.exe"
 $subtitleedit = "SubtitleEdit"
@@ -31,16 +32,45 @@ rule '.srt' => '.英語.ttml' do |t|
   end
 end
 
-rule '.sup' => '.日本語.ttml.zip' do |t|
+def resolution_of(bdnxml)
+  body = IO.read(bdnxml)
+  height = body[%r(Format VideoFormat="(\d+)p"), 1]
+  h = height.to_i
+  w = h * 16 / 9
+  "#{w}x#{h}"
+end
+
+def convert_ttml(source, format)
   Dir.mktmpdir do |dir|
-    extract_zip(t.source, dir)
+    extract_zip(source, dir)
     ttml = Dir.glob("#{dir}/*.xml").first
     Dir.mktmpdir do |dir2|
       ruby("ttml2bdnxml.rb", ttml, dir2)
       bdnxml = Dir.glob("#{dir2}/*_bdn.xml").first
-      sh($subtitleedit, "/convert", bdnxml, "blu-raysup", "/outputfolder:#{dir2}")
-      sup = Dir.glob("#{dir2}/*.sup").first
-      FileUtils.cp sup, t.name
+      resolution = "/resolution:#{resolution_of(bdnxml)}"
+      outputfolder = "/outputfolder:#{dir2}"
+      args = [ bdnxml, format, resolution, outputfolder ]
+      sh($subtitleedit, "/convert", *args)
+      yield dir2
+    end
+  end
+end
+
+rule '.sup' => '.日本語.ttml.zip' do |t|
+  convert_ttml(t.source, "Blu-raysup") do |dir|
+    Dir.glob("#{dir}/*.sup").each do |filename|
+      FileUtils.cp filename, t.name
+    end
+  end
+end
+
+rule '.sub' => '.日本語.ttml.zip' do |t|
+  convert_ttml(t.source, "VobSub") do |dir|
+    Dir.glob("#{dir}/*.{sub,idx}").each do |filename|
+      extname = File.extname(filename)
+      basename = "#{File.basename(t.name, ".sub")}#{extname}"
+      destname = File.join(File.dirname(t.name), basename)
+      FileUtils.cp filename, destname
     end
   end
 end
@@ -49,7 +79,7 @@ def ffmpeg(mp4, srt, sup, target)
   filter_complex = [
     "[0:v]subtitles=#{srt.gsub("C:", "")}:force_style='Alignment=6'[v0]", 
     "[1:s][v0]scale2ref[s][v1]",
-    "[v1][s]overlay[v]"
+    "[v1][s]overlay[v]",
   ].join(";")
 
   args = [
@@ -60,10 +90,13 @@ def ffmpeg(mp4, srt, sup, target)
     "-map", "[v]",
     "-codec:a", "mp3",
     "-map", "0:a:0",
-    "-y"
+    "-y",
+    # "-ss", "300",
+    # "-t", "120"
   ]
   sh $ffmpeg, *args, target
 end
+
 rule '_hardsub.mp4' => [ '.mp4', '.srt', '.sup' ] do |t|
   sources = t.sources.map do |filename|
     File.expand_path(filename, __FILE__)
@@ -73,13 +106,17 @@ rule '_hardsub.mp4' => [ '.mp4', '.srt', '.sup' ] do |t|
     basename = "#{dir}/#{SecureRandom.alphanumeric}"
     mp4 = "#{basename}.mp4"
     FileUtils.cp(sources[0], mp4)
-    srt = "#{basename}.srt"
-    FileUtils.cp(sources[1], srt)
-    sup = "#{basename}.sup"
-    FileUtils.cp(sources[2], sup)
+
+    eng = "#{basename}.srt"
+    FileUtils.cp(sources[1], eng)
+
+    extname = File.extname(t.sources[2])
+    ja = "#{basename}#{extname}"
+    FileUtils.cp(sources[2], ja)
+
     target = "#{basename}_.mp4"
-    ffmpeg(mp4, srt, sup, target)
-    FileUtils.cp(target, t.name)
+    ffmpeg(mp4, eng, ja, target)
+    FileUtils.mv(target, t.name)
     $stderr.puts "created  #{t.name}"
   end
 end
