@@ -9,6 +9,8 @@ require 'pry'
 $subtitleedit = "SubtitleEdit"
 $ffmpeg = "ffmpeg"
 
+$netflix_dir = ENV.fetch("NETFLIX_VIDEOS",
+                         File.join(ENV["USERPROFILE"], "Videos"))
 
 # https://stackoverflow.com/questions/9204423/how-to-unzip-a-file-in-ruby-on-rails
 def extract_zip(file, destination)
@@ -121,10 +123,9 @@ rule '_hardsub.mp4' => [ '.mp4', '.srt', '.sup' ] do |t|
   end
 end
 
-task :default do
-  dir = "#{ENV["USERPROFILE"]}\\Videos\\*.mp4"
-  Dir.glob(dir.gsub("\\", "/")) do |mp4|
-    p mp4
+task :hardsub, [:name] do |t, args|
+  glob = File.join($netflix_dir, "*#{args[:name]}*.mp4")
+  Dir.glob(glob.gsub("\\", "/")) do |mp4|
     next if mp4.include?("_hardsub.mp4")
     target = mp4.gsub(".mp4", "_hardsub.mp4")
     Rake::Task[target.encode("UTF-8")].invoke
