@@ -86,14 +86,18 @@ rule '.sup' => sup_source do |t|
   end
 end
 
+def move_sub_to_target(dir, target)
+  Dir.glob("#{dir}/*.{sub,idx}").each do |filename|
+    extname = File.extname(filename)
+    basename = "#{File.basename(target, ".sub")}#{extname}"
+    destname = File.join(File.dirname(target), basename)
+    FileUtils.mv filename, destname
+  end
+end
+
 rule '.ja.sub' => sup_source do |t|
   convert_ttml(t.source, "VobSub") do |dir|
-    Dir.glob("#{dir}/*.{sub,idx}").each do |filename|
-      extname = File.extname(filename)
-      basename = "#{File.basename(t.name, ".sub")}#{extname}"
-      destname = File.join(File.dirname(t.name), basename)
-      FileUtils.cp filename, destname
-    end
+    move_sub_to_target(dir, t.name)
   end
 end
 
@@ -152,3 +156,15 @@ task :hardsub, [:name] do |t, args|
     Rake::Task[target.encode("UTF-8")].invoke
   end
 end
+
+task :softsub, [:name] do |t, args|
+  glob = File.join($netflix_dir, "*#{args[:name]}*.mp4")
+  Dir.glob(glob.gsub("\\", "/")) do |mp4|
+    next if mp4.include?("_hardsub.mp4")
+    target = mp4.gsub(".mp4", ".ja.sub")
+    Rake::Task[target.encode("UTF-8")].invoke
+    target = mp4.gsub(".mp4", ".srt")
+    Rake::Task[target.encode("UTF-8")].invoke
+  end
+end
+
