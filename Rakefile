@@ -97,7 +97,7 @@ rule '.ja.sub' => sup_source do |t|
   end
 end
 
-def ffmpeg(mp4, srt, sup, target)
+def hardsub(mp4, srt, sup, target)
   filter_complex = [
     "[0:v]subtitles=#{srt.gsub("C:", "")}:force_style='Alignment=6'[v0]", 
     "[1:s][v0]scale2ref[s][v1]",
@@ -106,7 +106,8 @@ def ffmpeg(mp4, srt, sup, target)
 
   args = [
     "-i", mp4,
-    "-itsoffset", "5.5",
+    # "-itsoffset", "5.5",
+    "-itsoffset", "2",
     "-i", sup,
     "-filter_complex", filter_complex,
     "-map", "[v]",
@@ -137,7 +138,7 @@ rule '_hardsub.mp4' => [ '.mp4', '.srt', '.sup' ] do |t|
     FileUtils.cp(sources[2], ja)
 
     target = "#{basename}_.mp4"
-    ffmpeg(mp4, eng, ja, target)
+    hardsub(mp4, eng, ja, target)
     FileUtils.mv(target, t.name)
     $stderr.puts "created  #{t.name}"
   end
