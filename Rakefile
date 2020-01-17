@@ -24,7 +24,14 @@ def extract_zip(file, destination)
   end
 end
 
-rule '.srt' => '.英語.ttml' do |t|
+srt_source = -> (filename) do
+  source = filename.gsub(/\.srt$/, ".英語.ttml")
+  break source if File.exist?(source)
+
+  glob = filename.gsub(/\.srt/, ".*.ttml")
+  Dir.glob(glob).first || source
+end
+rule '.srt' => srt_source do |t|
   Dir.mktmpdir do |dir|
     sh($subtitleedit, "/convert", t.source, "srt", "/outputfolder:#{dir}")
     Dir.glob("#{dir}/*.srt") do |filename|
@@ -58,7 +65,20 @@ def convert_ttml(source, format)
   end
 end
 
-rule '.sup' => '.日本語.ttml.zip' do |t|
+sup_source = -> (filename) do
+  extname =
+    case filename
+    when /\.sup$/; /\.sup$/
+    when /\.ja\.sub$/; /\.ja\.sub$/
+    end
+  source = filename.gsub(extname, ".日本語.ttml.zip")
+  break source if File.exist?(source)
+
+  glob = filename.gsub(extname, ".*.ttml.zip")
+  Dir.glob(glob).first || source
+end
+
+rule '.sup' => sup_source do |t|
   convert_ttml(t.source, "Blu-raysup") do |dir|
     Dir.glob("#{dir}/*.sup").each do |filename|
       FileUtils.cp filename, t.name
@@ -66,7 +86,7 @@ rule '.sup' => '.日本語.ttml.zip' do |t|
   end
 end
 
-rule '.sub' => '.日本語.ttml.zip' do |t|
+rule '.ja.sub' => sup_source do |t|
   convert_ttml(t.source, "VobSub") do |dir|
     Dir.glob("#{dir}/*.{sub,idx}").each do |filename|
       extname = File.extname(filename)
