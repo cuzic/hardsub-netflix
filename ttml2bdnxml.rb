@@ -4,7 +4,7 @@ require 'fileutils'
 
 def subtitles(filename)
   body = open(filename, &:read)
-  tt = body[%r(<tt .+?>)]
+  tt = body[%r(<(ns2:)?tt .+?>)]
 
   extent = %r((?:ns[23]|tts):extent="(?<width>\d+)px (?<height>\d+)px")
   m = tt.match(extent)
