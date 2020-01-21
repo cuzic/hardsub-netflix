@@ -24,7 +24,7 @@ def subtitles(filename)
 end
 
 def f(time)
-  time.gsub(".", ":")[0..-2]
+  time.gsub(".", ":").slice(0, 11)
 end
 
 def layout_subtitle(event)
