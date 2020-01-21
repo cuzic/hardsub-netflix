@@ -8,7 +8,7 @@ def subtitles(filename)
 
   extent = %r((?:ns[23]|tts):extent="(?<width>\d+)px (?<height>\d+)px")
   m = tt.match(extent)
-  $width, $height = m.named_captures.values_at("width", "height")
+  $width, $height = m.named_captures.values_at("width", "height").map(&:to_i)
   origin = %r((?:ns[23]|tts):origin="(?<x>\d+)px (?<y>\d+)px")
   start = %r(begin="(?<start>[0-9:.]+)")
   finish = %r(end="(?<finish>[0-9:.]+)")
@@ -27,20 +27,22 @@ def f(time)
   time.gsub(".", ":").slice(0, 11)
 end
 
+$delta_x = $delta_y = 80
+
 def layout_subtitle(event)
   filename, x, y = *event.values_at("filename", "x", "y")
   imgname = "#{$src_dir}/#{filename}"
-  [imgname, "-repage", "+#{x}+#{y}"]
+  [imgname, "-repage", "+#{x.to_i-$delta_x}+#{y.to_i-$delta_y}"]
 end
 
 def convert(events)
   magick = ["magick", "convert"]
   args = [
-    "-size", "#{$width}x#{$height}",
-    "canvas:purple",
+    "-size", "#{$width-2*$delta_x}x#{$height-2*$delta_y}",
+    "canvas:gray3",
     *events.flat_map {|event| [ "(", *layout_subtitle(event), ")" ] },
     "-layers", "merge",
-    "-transparent", "purple"
+    "-transparent", "gray3"
   ]
   filename = events.first["filename"]
   converted = "#{$dir}/#{filename}"
@@ -77,10 +79,10 @@ def merge(events)
 
   convert(events)
   events.first.dup.tap do |ev|
-    ev["width"] = $width
-    ev["height"] = $height
-    ev["x"] = 0
-    ev["y"] = 0
+    ev["width"] = $width - 2*$delta_x
+    ev["height"] = $height - 2*$delta_y
+    ev["x"] = $delta_x
+    ev["y"] = $delta_y
   end
 end
 
