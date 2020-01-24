@@ -8,9 +8,13 @@ require 'pry'
 # $subtitleedit = "C:\\Program Files\\Subtitle Edit\\SubtitleEdit.exe"
 $subtitleedit = "SubtitleEdit"
 $ffmpeg = "ffmpeg"
-
 $netflix_dir = ENV.fetch("NETFLIX_VIDEOS",
                          File.join(ENV["USERPROFILE"], "Videos"))
+
+$extensions = {
+  "ja" => %w(日本語 Japanese),
+  "en" => %w(英語 English),
+}
 
 # https://stackoverflow.com/questions/9204423/how-to-unzip-a-file-in-ruby-on-rails
 def extract_zip(file, destination)
@@ -20,23 +24,6 @@ def extract_zip(file, destination)
     zip_file.each do |f|
       fpath = File.join(destination, f.name)
       zip_file.extract(f, fpath) unless File.exist?(fpath)
-    end
-  end
-end
-
-srt_source = -> (filename) do
-  source = filename.gsub(/\.srt$/, ".英語.ttml")
-  break source if File.exist?(source)
-
-  glob = filename.gsub(/\.srt/, ".*.ttml")
-  Dir.glob(glob).first || source
-end
-rule '.srt' => srt_source do |t|
-  Dir.mktmpdir do |dir|
-    sh($subtitleedit, "/convert", t.source, "srt", "/outputfolder:#{dir}")
-    Dir.glob("#{dir}/*.srt") do |filename|
-      FileUtils.cp filename, t.name
-      break
     end
   end
 end
@@ -65,24 +52,25 @@ def convert_ttml(source, format)
   end
 end
 
-sup_source = -> (filename) do
-  extname =
-    case filename
-    when /\.sup$/; /\.sup$/
-    when /\.ja\.sub$/; /\.ja\.sub$/
+def text_subtitle_sources(lang, extensions)
+  -> (filename) do
+    candidates = extensions.map do |ext|
+      filename.gsub(/\.#{lang}\..+/, ".#{ext}.ttml")
     end
-  source = filename.gsub(extname, ".日本語.ttml.zip")
-  break source if File.exist?(source)
-
-  glob = filename.gsub(extname, ".*.ttml.zip")
-  Dir.glob(glob).first || source
+    candidates.find do |source|
+      File.exist?(source)
+    end || candidates.first
+  end
 end
 
-rule '.sup' => sup_source do |t|
-  convert_ttml(t.source, "Blu-raysup") do |dir|
-    Dir.glob("#{dir}/*.sup").each do |filename|
-      FileUtils.cp filename, t.name
+def image_subtitle_sources(lang, extensions)
+  -> (filename) do
+    candidates = extensions.map do |ext|
+      filename.gsub(/\.#{lang}\..+/, ".#{ext}.ttml.zip")
     end
+    candidates.find do |source|
+      File.exist?(source)
+    end || candidates.first
   end
 end
 
@@ -95,9 +83,28 @@ def move_sub_to_target(dir, target)
   end
 end
 
-rule '.ja.sub' => sup_source do |t|
-  convert_ttml(t.source, "VobSub") do |dir|
-    move_sub_to_target(dir, t.name)
+$extensions.each do |lang, extensions|
+  text_sources = text_subtitle_sources(lang, extensions)
+  rule ".#{lang}.srt" => text_sources do |t|
+    Dir.mktmpdir do |dir|
+      sh($subtitleedit, "/convert", t.source, "srt", "/outputfolder:#{dir}")
+      filename = Dir.glob("#{dir}/*.srt").first
+      FileUtils.cp filename, t.name
+    end
+  end
+
+  image_sources = image_subtitle_sources(lang, extensions)
+  rule ".#{lang}.sub" => image_sources do |t|
+    convert_ttml(t.source, "VobSub") do |dir|
+      move_sub_to_target(dir, t.name)
+    end
+  end
+
+  rule ".#{lang}.sup" => image_sources do |t|
+    convert_ttml(t.source, "Blu-raysup") do |dir|
+      filename = Dir.glob("#{dir}/*.sup").first
+      FileUtils.cp filename, t.name
+    end
   end
 end
 
@@ -124,7 +131,7 @@ def hardsub(mp4, srt, sup, target)
   sh $ffmpeg, *args, target
 end
 
-rule '_hardsub.mp4' => [ '.mp4', '.srt', '.sup' ] do |t|
+rule '_hardsub.mp4' => [ '.mp4', '.en.srt', '.ja.sup' ] do |t|
   sources = t.sources.map do |filename|
     File.expand_path(filename, __FILE__)
   end
@@ -163,7 +170,7 @@ task :softsub, [:name] do |t, args|
     next if mp4.include?("_hardsub.mp4")
     target = mp4.gsub(".mp4", ".ja.sub")
     Rake::Task[target.encode("UTF-8")].invoke
-    target = mp4.gsub(".mp4", ".srt")
+    target = mp4.gsub(".mp4", ".en.srt")
     Rake::Task[target.encode("UTF-8")].invoke
   end
 end
