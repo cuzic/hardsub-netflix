@@ -52,10 +52,10 @@ def convert_ttml(source, format)
   end
 end
 
-def text_subtitle_sources(lang, extensions)
+def subtitle_sources(lang, extensions)
   -> (filename) do
     candidates = extensions.map do |ext|
-      filename.gsub(/\.#{lang}\..+/, ".#{ext}.ttml")
+      filename.gsub(/\.#{lang}\..+/, ext)
     end
     candidates.find do |source|
       File.exist?(source)
@@ -63,15 +63,18 @@ def text_subtitle_sources(lang, extensions)
   end
 end
 
-def image_subtitle_sources(lang, extensions)
-  -> (filename) do
-    candidates = extensions.map do |ext|
-      filename.gsub(/\.#{lang}\..+/, ".#{ext}.ttml.zip")
-    end
-    candidates.find do |source|
-      File.exist?(source)
-    end || candidates.first
+def text_subtitle_sources(lang, extensions)
+  exts = extensions.map do |ext|
+    ".#{ext}.ttml"
   end
+  subtitle_sources(lang, exts)
+end
+
+def image_subtitle_sources(lang, extensions)
+  exts = extensions.map do |ext|
+    ".#{ext}.ttml.zip"
+  end
+  subtitle_sources(lang, exts)
 end
 
 def move_sub_to_target(dir, target)
