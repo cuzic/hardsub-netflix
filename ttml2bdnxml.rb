@@ -27,8 +27,6 @@ def f(time)
   time.gsub(".", ":").slice(0, 11)
 end
 
-$delta_x = $delta_y = 80
-
 def layout_subtitle(event)
   filename, x, y = *event.values_at("filename", "x", "y")
   imgname = "#{$src_dir}/#{filename}"
@@ -121,6 +119,17 @@ def main
   $src_dir = File.dirname(ttml)
   $dir = ARGV.shift
   events = subtitles(ttml).to_a
+
+  $delta_x = events.flat_map do |ev|
+    x = ev["x"].to_i
+    width = ev["width"].to_i
+    [x, $width - (x+width)]
+  end.min - 2
+  $delta_y = events.flat_map do |ev|
+    y = ev["y"].to_i
+    height = ev["height"].to_i
+    [y, $height - (y+height)]
+  end.min - 2
 
   basename = File.basename(File.dirname(ttml), ".ttml")
   destname = "#{File.join($dir, basename)}_bdn.xml"
