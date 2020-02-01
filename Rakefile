@@ -5,16 +5,21 @@ require 'securerandom'
 require 'zip'
 require 'pry'
 
-# $subtitleedit = "C:\\Program Files\\Subtitle Edit\\SubtitleEdit.exe"
-$subtitleedit = "SubtitleEdit"
-$ffmpeg = "ffmpeg"
-$netflix_dir = ENV.fetch("NETFLIX_VIDEOS",
-                         File.join(ENV["USERPROFILE"], "Videos"))
+{
+  subtitleedit: "SubtitleEdit",
+  ffmpeg: "ffmpeg",
+  netflix_dir: ENV.fetch("NETFLIX_VIDEOS",
+    File.join(ENV["USERPROFILE"], "Videos")),
+  extensions: {
+    "ja" => %w(日本語 Japanese),
+    "en" => %w(英語 English),
+  },
+}.each do |key, value|
+  define_method key do
+    value
+  end
+end
 
-$extensions = {
-  "ja" => %w(日本語 Japanese),
-  "en" => %w(英語 English),
-}
 
 # https://stackoverflow.com/questions/9204423/how-to-unzip-a-file-in-ruby-on-rails
 def extract_zip(file, destination)
@@ -60,7 +65,7 @@ def convert_ttml(source, format)
       resolution = "/resolution:#{resolution_of(bdnxml)}"
       outputfolder = "/outputfolder:#{dir2}"
       args = [ bdnxml, format, resolution, outputfolder ]
-      sh($subtitleedit, "/convert", *args)
+      sh(subtitleedit, "/convert", *args)
       yield dir2
     end
   end
@@ -100,17 +105,17 @@ def move_sub_to_target(dir, target)
   end
 end
 
-$extensions.each do |lang, extensions|
-  text_sources = text_subtitle_sources(lang, extensions)
+extensions.each do |lang, exts|
+  text_sources = text_subtitle_sources(lang, exts)
   rule ".#{lang}.srt" => text_sources do |t|
     mktmpdir do |dir|
-      sh($subtitleedit, "/convert", t.source, "srt", "/outputfolder:#{dir}")
+      sh(subtitleedit, "/convert", t.source, "srt", "/outputfolder:#{dir}")
       filename = Dir.glob("#{dir}/*.srt").first
       FileUtils.cp filename, t.name
     end
   end
 
-  image_sources = image_subtitle_sources(lang, extensions)
+  image_sources = image_subtitle_sources(lang, exts)
   rule ".#{lang}.sub" => image_sources do |t|
     convert_ttml(t.source, "VobSub") do |dir|
       move_sub_to_target(dir, t.name)
@@ -142,10 +147,8 @@ def hardsub(mp4, srt, sup, target)
     "-codec:a", "mp3",
     "-map", "0:a:0",
     "-y",
-    # "-ss", "300",
-    # "-t", "120"
   ]
-  sh $ffmpeg, *args, target
+  sh ffmpeg, *args, target
 end
 
 rule '_hardsub.mp4' => [ '.mp4', '.en.srt', '.ja.sup' ] do |t|
@@ -173,7 +176,7 @@ rule '_hardsub.mp4' => [ '.mp4', '.en.srt', '.ja.sup' ] do |t|
 end
 
 task :hardsub, [:name] do |t, args|
-  glob = File.join($netflix_dir, "*#{args[:name]}*.mp4")
+  glob = File.join(netflix_dir, "*#{args[:name]}*.mp4")
   Dir.glob(glob.gsub("\\", "/")) do |mp4|
     next if mp4.include?("_hardsub.mp4")
     target = mp4.gsub(".mp4", "_hardsub.mp4")
@@ -182,7 +185,7 @@ task :hardsub, [:name] do |t, args|
 end
 
 task :softsub, [:name] do |t, args|
-  glob = File.join($netflix_dir, "*#{args[:name]}*.mp4")
+  glob = File.join(netflix_dir, "*#{args[:name]}*.mp4")
   Dir.glob(glob.gsub("\\", "/")) do |mp4|
     next if mp4.include?("_hardsub.mp4")
     target = mp4.gsub(".mp4", ".ja.sub")
