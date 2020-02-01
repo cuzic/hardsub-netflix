@@ -36,11 +36,25 @@ def resolution_of(bdnxml)
   "#{w}x#{h}"
 end
 
+def mktmpdir
+  prefix = "d"
+  tmpdir = %W(
+    HARDSUB_NETFLIX_TEMP
+    TMPDIR TMP TEMP USERPROFILE
+  ).each do |env|
+    break ENV[env] if ENV.key?(env)
+  end
+
+  Dir.mktmpdir(prefix, tmpdir) do |dir|
+    yield dir.gsub("\\", "/")
+  end
+end
+
 def convert_ttml(source, format)
-  Dir.mktmpdir do |dir|
+  mktmpdir do |dir|
     extract_zip(source, dir)
     ttml = Dir.glob("#{dir}/*.xml").first
-    Dir.mktmpdir do |dir2|
+    mktmpdir do |dir2|
       ruby("ttml2bdnxml.rb", ttml, dir2)
       bdnxml = Dir.glob("#{dir2}/*_bdn.xml").first
       resolution = "/resolution:#{resolution_of(bdnxml)}"
@@ -89,7 +103,7 @@ end
 $extensions.each do |lang, extensions|
   text_sources = text_subtitle_sources(lang, extensions)
   rule ".#{lang}.srt" => text_sources do |t|
-    Dir.mktmpdir do |dir|
+    mktmpdir do |dir|
       sh($subtitleedit, "/convert", t.source, "srt", "/outputfolder:#{dir}")
       filename = Dir.glob("#{dir}/*.srt").first
       FileUtils.cp filename, t.name
@@ -138,7 +152,7 @@ rule '_hardsub.mp4' => [ '.mp4', '.en.srt', '.ja.sup' ] do |t|
   sources = t.sources.map do |filename|
     File.expand_path(filename, __FILE__)
   end
-  Dir.mktmpdir do |dir|
+  mktmpdir do |dir|
     $stderr.puts "creating #{t.name}"
     basename = "#{dir}/#{SecureRandom.alphanumeric}"
     mp4 = "#{basename}.mp4"
