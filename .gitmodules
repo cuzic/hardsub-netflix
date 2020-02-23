@@ -1,0 +1,3 @@
+[submodule "BDSup2Sub"]
+	path = BDSup2Sub
+	url = git@github.com:cuzic/BDSup2Sub.git
