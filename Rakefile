@@ -14,7 +14,10 @@ require 'pry'
     "ja" => %w(日本語 Japanese),
     "en" => %w(英語 English),
   },
-  softsub_targets: ["ja", "en"],
+  softsub_targets: {
+    "ja" => "sub",
+    "en" => "srt",
+  },
 }.each do |key, value|
   define_method key do
     value
@@ -189,8 +192,8 @@ task :softsub, [:name] do |t, args|
   glob = File.join(netflix_dir, "*#{args[:name]}*.mp4")
   Dir.glob(glob.gsub("\\", "/")) do |mp4|
     next if mp4.include?("_hardsub.mp4")
-    softsub_targets.each do |lang|
-      target = mp4.gsub(".mp4", ".#{lang}.sub")
+    softsub_targets.each do |lang, ext|
+      target = mp4.gsub(".mp4", ".#{lang}.#{ext}")
       Rake::Task[target.encode("UTF-8")].invoke
     end
   end
