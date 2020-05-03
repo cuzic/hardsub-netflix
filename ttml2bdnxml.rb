@@ -3,9 +3,8 @@ require 'erb'
 require 'fileutils'
 
 class Converter
-  def initialize(width, height, delta_x, delta_y, dir, src_dir, destname, events)
-    @width, @height, @delta_x, @delta_y =
-      width, height, delta_x, delta_y
+  def initialize(width, height, dir, src_dir, destname, events)
+    @width, @height = width, height
     @dir, @src_dir = dir, src_dir
     @destname = destname
     @events = events.to_a
@@ -17,22 +16,11 @@ class Converter
     dir = argv.shift
 
     width, height, events = subtitles(ttml)
-    delta_x = events.flat_map do |ev|
-      x = ev["x"].to_i
-      w = ev["width"].to_i
-      [x, width - (x+w)]
-    end.min - 2
-    delta_y = events.flat_map do |ev|
-      y = ev["y"].to_i
-      h = ev["height"].to_i
-      [y, height - (y+h)]
-    end.min - 2
 
     basename = File.basename(File.dirname(ttml), ".ttml")
     destname = "#{File.join(dir, basename)}_bdn.xml"
 
-    self.new(width, height, delta_x, delta_y, dir, src_dir,
-             destname, events)
+    self.new(width, height, dir, src_dir, destname, events)
   end
 
   def self.subtitles(filename)
@@ -60,43 +48,65 @@ class Converter
     time.gsub(".", ":").slice(0, 11)
   end
 
-  def coordinate(x, y)
-    "+#{x.to_i-@delta_x}+#{y.to_i-@delta_y}"
+  def delta_x_of(events, sizes)
+    events.zip(sizes).flat_map do |ev, (width, _)|
+      x = ev["x"].to_i
+      [ x, @width - x - width ]
+    end.min
   end
 
-  def layout_subtitle(event)
-    filename, x, y = *event.values_at("filename", "x", "y")
+  def top_y_of(events)
+    events.map do |ev|
+      ev["y"].to_i
+    end.min
+  end
+
+  def bottom_y_of(events, sizes)
+    events.zip(sizes).map do |ev, (_, height)|
+      ev["y"].to_i + height
+    end.max
+  end
+
+  def size(delta_x, top_y, bottom_y)
+    "#{@width-2*delta_x}x#{bottom_y - top_y}"
+  end
+
+  def coordinate(event, delta_x, top_y)
+    x = event["x"].to_i
+    y = event["y"].to_i
+    "+#{x-delta_x}+#{y-top_y}"
+  end
+
+  def layout_subtitle(event, delta_x, top_y)
+    filename = event["filename"]
     imgname = "#{@src_dir}/#{filename}"
-    [imgname, "-repage", coordinate(x, y)]
-  end
-
-  def size
-    @size ||= "#{@width-2*@delta_x}x#{@height-2*@delta_y}"
+    [imgname, "-repage", coordinate(event, delta_x, top_y)]
   end
 
   def convert(events)
+    sizes = events.map do |ev|
+      ev.values_at("width", "height").map(&:to_i)
+    end
+    delta_x = delta_x_of(events, sizes)
+    top_y = top_y_of(events)
+    bottom_y = bottom_y_of(events, sizes)
+
     magick = ["magick", "convert"]
     args = [
-      "-size", size,
+      "-size", size(delta_x, top_y, bottom_y),
       "canvas:gray3",
-      *events.flat_map {|event| [ "(", *layout_subtitle(event), ")" ] },
+      *events.flat_map {|event| [ "(", *layout_subtitle(event, delta_x, top_y), ")" ] },
       "-layers", "merge",
       "-transparent", "gray3"
     ]
     filename = events.first["filename"]
     converted = "#{@dir}/#{filename}"
     unless File.file?(converted)
-      # puts [*magick, *args, converted].map{|s| %("#{s}")}.join(" ")
       system(*magick, *args, converted)
+      # puts [*magick, *args, converted].map{|s| %("#{s}")}.join(" ")
     end
-  end
 
-  def default_width
-    @default_width ||= @width - 2*@delta_x
-  end
-
-  def default_height
-    @default_height ||= @height - 2*@delta_y
+    return delta_x, top_y, bottom_y
   end
 
   def source(event)
@@ -107,12 +117,12 @@ class Converter
     File.join(@dir, event["filename"])
   end
 
-  def update(event)
+  def update(event, delta_x, top_y, bottom_y)
     event.dup.tap do |ev|
-      ev["width"] = default_width
-      ev["height"] = default_height
-      ev["x"] = @delta_x
-      ev["y"] = @delta_y
+      ev["width"] = @width - 2*delta_x
+      ev["height"] = bottom_y - top_y
+      ev["x"] = delta_x
+      ev["y"] = top_y
     end
   end
 
@@ -126,8 +136,8 @@ class Converter
       end
     end
 
-    convert(events)
-    update(events.first)
+    delta_x, top_y, bottom_y = convert(events)
+    update(events.first, delta_x, top_y, bottom_y)
   end
 
   def render_event(event)
