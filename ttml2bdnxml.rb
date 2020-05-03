@@ -85,7 +85,6 @@ class Converter
 
   def convert(events)
     sizes = events.map do |ev|
-      imgname = "#{@src_dir}/#{ev["filename"]}"
       ev.values_at("width", "height").map(&:to_i)
     end
     delta_x = delta_x_of(events, sizes)
