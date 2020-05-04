@@ -62,9 +62,14 @@ class Converter
   end
 
   def bottom_y_of(events, sizes)
-    events.zip(sizes).map do |ev, (_, height)|
-      ev["y"].to_i + height
-    end.max
+    if events.group_by{|ev| ev["height"].to_i < ev["width"].to_i }.size == 2
+      event = events.find{|ev| ev["height"].to_i < ev["width"].to_i }
+      event["y"].to_i + event["height"].to_i
+    else
+      events.zip(sizes).map do |ev, (_, height)|
+        ev["y"].to_i + height
+      end.max
+    end
   end
 
   def size(delta_x, top_y, bottom_y)
@@ -77,10 +82,16 @@ class Converter
     "+#{x-delta_x}+#{y-top_y}"
   end
 
-  def layout_subtitle(event, delta_x, top_y)
+  def layout_subtitle(event, delta_x, top_y, bottom_y)
     filename = event["filename"]
     imgname = "#{@src_dir}/#{filename}"
-    [imgname, "-repage", coordinate(event, delta_x, top_y)]
+    canvas_height = bottom_y - top_y
+    if event["height"].to_i > canvas_height
+      [imgname, "-crop", "#{event["width"]}x#{canvas_height}+0+0", "+repage",
+       "-repage", "#{event["width"]}x#{canvas_height}#{coordinate(event, delta_x, top_y)}"]
+    else
+      [imgname, "-repage", coordinate(event, delta_x, top_y)]
+    end
   end
 
   def convert(events)
@@ -95,7 +106,7 @@ class Converter
     args = [
       "-size", size(delta_x, top_y, bottom_y),
       "canvas:gray3",
-      *events.flat_map {|event| [ "(", *layout_subtitle(event, delta_x, top_y), ")" ] },
+      *events.flat_map {|event| [ "(", *layout_subtitle(event, delta_x, top_y, bottom_y), ")" ] },
       "-layers", "merge",
       "-transparent", "gray3"
     ]
