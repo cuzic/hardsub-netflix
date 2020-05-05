@@ -3,11 +3,19 @@ require 'erb'
 require 'fileutils'
 
 class Converter
+  Event = Struct.new(:width, :height, :x, :y, :start, :finish, :filename) do
+    def initialize(width, height, x, y, start, finish, filename)
+      super(width.to_i, height.to_i, x.to_i, y.to_i, start, finish, filename)
+    end
+  end
+
   def initialize(width, height, dir, src_dir, destname, events)
-    @width, @height = width, height
+    @width, @height = width.to_i, height.to_i
     @dir, @src_dir = dir, src_dir
     @destname = destname
-    @events = events.to_a
+    @events = events.map do |ev|
+      Event.new(*ev.values_at("width", "height", "x", "y", "start", "finish", "filename"))
+    end
   end
 
   def self.create(argv)
@@ -29,7 +37,7 @@ class Converter
 
     extent = %r((?:ns[23]|tts):extent="(?<width>\d+)px (?<height>\d+)px")
     m = tt.match(extent)
-    width, height = m.named_captures.values_at("width", "height").map(&:to_i)
+    width, height = m.named_captures.values_at("width", "height")
     origin = %r((?:ns[23]|tts):origin="(?<x>\d+)px (?<y>\d+)px")
     start = %r(begin="(?<start>[0-9:.]+)")
     finish = %r(end="(?<finish>[0-9:.]+)")
@@ -50,24 +58,24 @@ class Converter
 
   def delta_x_of(events, sizes)
     events.zip(sizes).flat_map do |ev, (width, _)|
-      x = ev["x"].to_i
+      x = ev.x
       [ x, @width - x - width ]
     end.min
   end
 
   def top_y_of(events)
     events.map do |ev|
-      ev["y"].to_i
+      ev.y
     end.min
   end
 
   def bottom_y_of(events, sizes)
-    if events.group_by{|ev| ev["height"].to_i < ev["width"].to_i }.size == 2
-      event = events.find{|ev| ev["height"].to_i < ev["width"].to_i }
-      event["y"].to_i + event["height"].to_i
+    if events.group_by{|ev| ev.height < ev.width }.size == 2
+      event = events.find{|ev| ev.height < ev.width }
+      event.y + event.width
     else
       events.zip(sizes).map do |ev, (_, height)|
-        ev["y"].to_i + height
+        ev.y + height
       end.max
     end
   end
@@ -77,18 +85,18 @@ class Converter
   end
 
   def coordinate(event, delta_x, top_y)
-    x = event["x"].to_i
-    y = event["y"].to_i
+    x = event.x
+    y = event.y
     "+#{x-delta_x}+#{y-top_y}"
   end
 
   def layout_subtitle(event, delta_x, top_y, bottom_y)
-    filename = event["filename"]
+    filename = event.filename
     imgname = "#{@src_dir}/#{filename}"
     canvas_height = bottom_y - top_y
-    if event["height"].to_i > canvas_height
-      [imgname, "-crop", "#{event["width"]}x#{canvas_height}+0+0", "+repage",
-       "-repage", "#{event["width"]}x#{canvas_height}#{coordinate(event, delta_x, top_y)}"]
+    if event.height > canvas_height
+      [imgname, "-crop", "#{event.height}x#{canvas_height}+0+0", "+repage",
+       "-repage", "#{event.width}x#{canvas_height}#{coordinate(event, delta_x, top_y)}"]
     else
       [imgname, "-repage", coordinate(event, delta_x, top_y)]
     end
@@ -96,7 +104,7 @@ class Converter
 
   def convert(events)
     sizes = events.map do |ev|
-      ev.values_at("width", "height").map(&:to_i)
+      [ ev.width, ev.height ]
     end
     delta_x = delta_x_of(events, sizes)
     top_y = top_y_of(events)
@@ -121,27 +129,26 @@ class Converter
   end
 
   def source(event)
-    File.join(@src_dir, event["filename"])
+    File.join(@src_dir, event.filename)
   end
 
   def dest(event)
-    File.join(@dir, event["filename"])
+    File.join(@dir, event.filename)
   end
 
   def update(event, delta_x, top_y, bottom_y)
     event.dup.tap do |ev|
-      ev["width"] = @width - 2*delta_x
-      ev["height"] = bottom_y - top_y
-      ev["x"] = delta_x
-      ev["y"] = top_y
+      ev.width = @width - 2*delta_x
+      ev.height = bottom_y - top_y
+      ev.x = delta_x
+      ev.y = top_y
     end
   end
 
   def merge(events)
     if events.size == 1
       event = events.first
-      if event["height"].to_i < event["width"].to_i &&
-          400 < event["y"].to_i
+      if event.height < event.width && 400 < event.y
         FileUtils.cp(source(event), dest(event))
         return event
       end
@@ -153,8 +160,8 @@ class Converter
 
   def render_event(event)
     <<~EVENT
-  <Event InTC="#{f event["start"]}" OutTC="#{f event["finish"]}" Forced="False">
-    <Graphic Width="#{event["width"]}" Height="#{event["height"]}" X="#{event["x"]}" Y="#{event["y"]}">#{event["filename"]}</Graphic>
+  <Event InTC="#{f event.start}" OutTC="#{f event.finish}" Forced="False">
+    <Graphic Width="#{event.width}" Height="#{event.height}" X="#{event.x}" Y="#{event.y}">#{event.filename}</Graphic>
   </Event>
     EVENT
   end
@@ -168,13 +175,13 @@ class Converter
 
   def grouped_events(events)
     events.group_by do |event|
-      event.values_at("start", "finish")
+      [ event.start, event.finish ]
     end.sort
   end
 
   def render
-    first_time = @events.first["start"]
-    last_time = @events.last["finish"]
+    first_time = @events.first.start
+    last_time = @events.last.finish
     grouped = grouped_events(@events)
 
     open(@destname, "w") do |f|
