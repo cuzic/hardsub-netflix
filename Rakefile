@@ -11,8 +11,8 @@ require 'pry'
   netflix_dir: ENV.fetch("NETFLIX_VIDEOS",
     File.join(ENV["USERPROFILE"], "Videos")),
   extensions: {
-    "ja" => %w(日本語 Japanese),
-    "en" => %w(英語 English),
+    "ja" => %w(日本語 Japanese CC.Japanese FORCED.Japanese),
+    "en" => %w(英語 English CC.English FORCED.English),
   },
   softsub_targets: {
     "ja" => "sub",
@@ -193,7 +193,10 @@ task :softsub, [:name] do |t, args|
   Dir.glob(glob.gsub("\\", "/")) do |mp4|
     next if mp4.include?("_hardsub.mp4")
     softsub_targets.each do |lang, ext|
-      target = mp4.gsub(".mp4", ".#{lang}.#{ext}")
+      suffix = ".#{lang}.#{ext}"
+      target = mp4.gsub(".mp4", suffix)
+      next if File.file? target.gsub(suffix, ".CC#{suffix}")
+      next if File.file? target.gsub(suffix, ".FORCED#{suffix}")
       Rake::Task[target.encode("UTF-8")].invoke
     end
   end
