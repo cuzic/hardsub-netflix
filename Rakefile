@@ -89,7 +89,8 @@ end
 def text_subtitle_sources(lang, extensions)
   exts = extensions.map do |ext|
     ".#{ext}.ttml"
-  end
+  end + [ ".CC.#{lang}.srt", ".FORCED.#{lang}.srt" ]
+
   subtitle_sources(lang, exts)
 end
 
