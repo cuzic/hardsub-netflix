@@ -148,8 +148,10 @@ class Converter
   def merge(events)
     if events.size == 1
       event = events.first
-      FileUtils.cp(source(event), dest(event))
-      return event
+      if event.height < event.width && 400 < event.y
+        FileUtils.cp(source(event), dest(event))
+        return event
+      end
     end
 
     delta_x, top_y, bottom_y = convert(events)
