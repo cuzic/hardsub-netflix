@@ -146,21 +146,15 @@ class Converter
   end
 
   def merge(events)
-    if events.size == 1
-      event = events.first
-      FileUtils.cp(source(event), dest(event))
-      return event
-    end
-
     delta_x, top_y, bottom_y = convert(events)
     update(events.first, delta_x, top_y, bottom_y)
   end
 
   def render_event(event)
     <<~EVENT
-  <Event InTC="#{f event.start}" OutTC="#{f event.finish}" Forced="False">
-    <Graphic Width="#{event.width}" Height="#{event.height}" X="#{event.x}" Y="#{event.y}">#{event.filename}</Graphic>
-  </Event>
+    <Event InTC="#{f event.start}" OutTC="#{f event.finish}" Forced="False">
+      <Graphic Width="#{event.width}" Height="#{event.height}" X="#{event.x}" Y="#{event.y}">#{event.filename}</Graphic>
+    </Event>
     EVENT
   end
 
