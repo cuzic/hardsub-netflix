@@ -113,10 +113,15 @@ end
 extensions.each do |lang, exts|
   text_sources = text_subtitle_sources(lang, exts)
   rule ".#{lang}.srt" => text_sources do |t|
-    mktmpdir do |dir|
-      sh(subtitleedit, "/convert", t.source, "srt", "/outputfolder:#{dir}")
-      filename = Dir.glob("#{dir}/*.srt").first
-      FileUtils.cp filename, t.name
+    source = t.source
+    if source.end_with?(".srt")
+      FileUtils.mv source, t.name
+    elsif source.end_with?(".ttml")
+      mktmpdir do |dir|
+        sh(subtitleedit, "/convert", source, "srt", "/outputfolder:#{dir}")
+        filename = Dir.glob("#{dir}/*.srt").first
+        FileUtils.cp filename, t.name
+      end
     end
   end
 
@@ -196,8 +201,6 @@ task :softsub, [:name] do |t, args|
     softsub_targets.each do |lang, ext|
       suffix = ".#{lang}.#{ext}"
       target = mp4.gsub(".mp4", suffix)
-      next if File.file? target.gsub(suffix, ".CC#{suffix}")
-      next if File.file? target.gsub(suffix, ".FORCED#{suffix}")
       Rake::Task[target.encode("UTF-8")].invoke
     end
   end
