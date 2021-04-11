@@ -60,6 +60,8 @@ def mktmpdir
 end
 
 def convert_ttml(source, format)
+  system("where magick > nul 2> nul") or abort("install ImageMagick and add it into PATH environment variable")
+  system("where #{subtitleedit} > nul 2> nul") or abort("install SubtitleEdit and add it into PATH environment variable")
   mktmpdir do |dir|
     extract_zip(source, dir)
     ttml = Dir.glob("#{dir}/*.xml").first
